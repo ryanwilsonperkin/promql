@@ -21,8 +21,9 @@ type DashboardFile struct {
 	Dashboard Dashboard `json:"dashboard"`
 }
 
-func NewDashboardFile(bytes []byte) DashboardFile {
+func NewDashboardFile(filename string) DashboardFile {
 	var dashboardFile DashboardFile
+	bytes := loadFile(filename)
 	json.Unmarshal(bytes, &dashboardFile)
 	return dashboardFile
 }
@@ -125,6 +126,48 @@ type Variable struct {
 	Value string
 }
 
+type MonitorFile struct {
+	ID         string `json:"id"`
+	Expression string `json:"expression"`
+}
+
+func NewMonitorFile(filename string) MonitorFile {
+	var monitorFile MonitorFile
+	bytes := loadFile(filename)
+	json.Unmarshal(bytes, &monitorFile)
+	return monitorFile
+}
+
+func (monitorFile *MonitorFile) Load(metrics Metrics) {
+	var variables []Variable
+	expression := normalizeExpression(monitorFile.Expression, variables)
+	if expression == "" {
+		SKIPPED++
+		return
+	}
+
+	selectors, err := parseSelectors(expression)
+	if err != nil {
+		ERRORS++
+		fmt.Fprintf(
+			os.Stderr,
+			"\033[31mMonitor '%s'\033[0m\n"+
+				"\033[31m%s\033[0m\nOriginal:\t%s\nNormalized:\t%s\n\n",
+			monitorFile.ID,
+			err.Error(),
+			monitorFile.Expression,
+			expression,
+		)
+	}
+
+	for _, selector := range selectors {
+		name, labels := loadMetric(selector)
+		metrics[name] = merge(metrics[name], labels)
+	}
+	SUCCESS++
+	return
+}
+
 var REPLACE_XRATE_EXPR = regexp.MustCompile("xrate\\(")
 var REPLACE_XINCREASE_EXPR = regexp.MustCompile("xincrease\\(")
 
@@ -164,11 +207,15 @@ func main() {
 	}
 	backupDir := os.Args[1]
 	dashboardFiles := listFiles(filepath.Join(backupDir, "dashboards"))
-	// monitorFiles := listFiles(filepath.Join(backupDir, "monitors"))
+	monitorFiles := listFiles(filepath.Join(backupDir, "monitors"))
 	// sloFiles := listFiles(filepath.Join(backupDir, "slos"))
 
-	for _, dashboard := range Map(Map(dashboardFiles, loadFile), NewDashboardFile) {
+	for _, dashboard := range Map(dashboardFiles, NewDashboardFile) {
 		dashboard.Load(metrics)
+	}
+
+	for _, monitor := range Map(monitorFiles, NewMonitorFile) {
+		monitor.Load(metrics)
 	}
 
 	for metric, labels := range metrics {
@@ -329,7 +376,7 @@ func safeIndex(strings []string, idx int) string {
 }
 
 func listFiles(directory string) []string {
-	files, err := os.ReadDir(filepath.Join(directory, "dashboards"))
+	files, err := os.ReadDir(directory)
 	if err != nil {
 		log.Fatal(err)
 	}
