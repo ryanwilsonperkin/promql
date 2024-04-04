@@ -27,7 +27,7 @@ func (monitorFile *MonitorFile) Load(metrics Metrics) LoadResult {
 		return result
 	}
 
-	selectors, err := parseSelectors(expression)
+	monitorMetrics, err := parseExpression(expression)
 	if err != nil {
 		result.Failed++
 		fmt.Fprintf(
@@ -41,10 +41,7 @@ func (monitorFile *MonitorFile) Load(metrics Metrics) LoadResult {
 		)
 	}
 
-	for _, selector := range selectors {
-		name, labels := loadMetric(selector)
-		metrics.AddLabels(name, labels)
-	}
+	metrics.Add(monitorMetrics)
 	result.Succeeded++
 	return result
 }

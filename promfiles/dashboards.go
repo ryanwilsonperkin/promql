@@ -35,7 +35,7 @@ func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
 			}
 
 			expression := normalizeExpression(target.Expr, variables)
-			selectors, err := parseSelectors(expression)
+			targetMetrics, err := parseExpression(expression)
 			if err != nil {
 				result.Failed++
 				fmt.Fprintf(
@@ -50,10 +50,7 @@ func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
 				)
 			}
 
-			for _, selector := range selectors {
-				name, labels := loadMetric(selector)
-				metrics.AddLabels(name, labels)
-			}
+			metrics.Add(targetMetrics)
 			result.Succeeded++
 		}
 	}

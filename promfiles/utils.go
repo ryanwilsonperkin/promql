@@ -25,22 +25,28 @@ func NewMetrics() Metrics {
 
 }
 
-func (metrics *Metrics) AddMetric(name string) {
-	if metrics.Entries[name] == nil {
-		metrics.Entries[name] = make([]string, 0)
-	}
-}
-
-func (metrics *Metrics) AddLabel(name string, label string) {
-	metrics.AddMetric(name)
-	if !slices.Contains(metrics.Entries[name], label) {
-		metrics.Entries[name] = append(metrics.Entries[name], label)
+func (metrics *Metrics) Add(otherMetrics Metrics) {
+	for name, labels := range otherMetrics.Entries {
+		metrics.AddLabels(name, labels)
 	}
 }
 
 func (metrics *Metrics) AddLabels(name string, labels []string) {
 	for _, label := range labels {
-		metrics.AddLabel(name, label)
+		metrics.addLabel(name, label)
+	}
+}
+
+func (metrics *Metrics) addMetric(name string) {
+	if metrics.Entries[name] == nil {
+		metrics.Entries[name] = make([]string, 0)
+	}
+}
+
+func (metrics *Metrics) addLabel(name string, label string) {
+	metrics.addMetric(name)
+	if !slices.Contains(metrics.Entries[name], label) {
+		metrics.Entries[name] = append(metrics.Entries[name], label)
 	}
 }
 
@@ -128,12 +134,33 @@ func normalizeExpression(expr string, variables []Variable) string {
 }
 
 // Parse an expression and return the metrics
-func parseSelectors(input string) ([][]*labels.Matcher, error) {
+func parseExpression(input string) (Metrics, error) {
+	var metrics = NewMetrics()
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
-		return nil, err
+		return metrics, err
 	}
-	return parser.ExtractSelectors(expr), nil
+
+	selectors := parser.ExtractSelectors(expr)
+	for _, selector := range selectors {
+		name, labels := parseSelector(selector)
+		metrics.AddLabels(name, labels)
+	}
+	return metrics, nil
+}
+
+// Format is like [[__name__="MetricName" label1="value" label2="value"]]
+func parseSelector(selector []*labels.Matcher) (string, []string) {
+	var name string
+	var labels []string
+	for _, element := range selector {
+		if element.Name == "__name__" {
+			name = element.Value
+		} else {
+			labels = append(labels, element.Name)
+		}
+	}
+	return name, labels
 }
 
 func loadFile(filename string) []byte {
@@ -148,20 +175,6 @@ func loadFile(filename string) []byte {
 		log.Fatal(err)
 	}
 	return byteValue
-}
-
-// Format is like [[__name__="MetricName" label1="value" label2="value"]]
-func loadMetric(selector []*labels.Matcher) (string, []string) {
-	var name string
-	var labels []string
-	for _, element := range selector {
-		if element.Name == "__name__" {
-			name = element.Value
-		} else {
-			labels = append(labels, element.Name)
-		}
-	}
-	return name, labels
 }
 
 func merge(arr1 []string, arr2 []string) []string {
