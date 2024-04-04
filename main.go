@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -17,6 +19,52 @@ import (
 
 type DashboardFile struct {
 	Dashboard Dashboard `json:"dashboard"`
+}
+
+func NewDashboardFile(bytes []byte) DashboardFile {
+	var dashboardFile DashboardFile
+	json.Unmarshal(bytes, &dashboardFile)
+	return dashboardFile
+}
+
+func (dashboardFile *DashboardFile) Load(metrics Metrics) {
+	variables := loadVariables(dashboardFile.Dashboard)
+
+	for _, panel := range dashboardFile.Dashboard.Panels {
+		if slices.Contains(IGNORED_TYPES, panel.Type) {
+			SKIPPED++
+			continue
+		}
+
+		for _, target := range panel.Targets {
+			expression := normalizeExpression(target.Expr, variables)
+			if expression == "" {
+				SKIPPED++
+				continue
+			}
+
+			selectors, err := parseSelectors(expression)
+			if err != nil {
+				ERRORS++
+				fmt.Fprintf(
+					os.Stderr,
+					"\033[31mDashboard '%s', Panel '%d'\033[0m\n"+
+						"\033[31m%s\033[0m\nOriginal:\t%s\nNormalized:\t%s\n\n",
+					dashboardFile.Dashboard.UID,
+					panel.ID,
+					err.Error(),
+					target.Expr,
+					expression,
+				)
+			}
+
+			for _, selector := range selectors {
+				name, labels := loadMetric(selector)
+				metrics[name] = merge(metrics[name], labels)
+			}
+			SUCCESS++
+		}
+	}
 }
 
 type Dashboard struct {
@@ -109,12 +157,20 @@ var SUCCESS = 0
 var SKIPPED = 0
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("usage: command_name FILE [...FILE]")
+	var metrics = make(Metrics)
+
+	if len(os.Args) != 2 {
+		log.Fatal("usage: command_name BACKUP_DIR")
 	}
-	filenames := os.Args[1:]
-	dashboards := Map(filenames, loadDashboard)
-	metrics := loadMetrics(dashboards)
+	backupDir := os.Args[1]
+	dashboardFiles := listFiles(filepath.Join(backupDir, "dashboards"))
+	// monitorFiles := listFiles(filepath.Join(backupDir, "monitors"))
+	// sloFiles := listFiles(filepath.Join(backupDir, "slos"))
+
+	for _, dashboard := range Map(Map(dashboardFiles, loadFile), NewDashboardFile) {
+		dashboard.Load(metrics)
+	}
+
 	for metric, labels := range metrics {
 		fmt.Printf("%s %s\n", metric, strings.Join(labels, " "))
 	}
@@ -182,7 +238,7 @@ func parseSelectors(input string) ([][]*labels.Matcher, error) {
 	return parser.ExtractSelectors(expr), nil
 }
 
-func loadDashboard(filename string) Dashboard {
+func loadFile(filename string) []byte {
 	jsonFile, err := os.Open(filename)
 	defer jsonFile.Close()
 	if err != nil {
@@ -193,11 +249,7 @@ func loadDashboard(filename string) Dashboard {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	var dashboardFile DashboardFile
-	json.Unmarshal(byteValue, &dashboardFile)
-
-	return dashboardFile.Dashboard
+	return byteValue
 }
 
 func loadVariables(dashboard Dashboard) []Variable {
@@ -216,50 +268,6 @@ func loadVariables(dashboard Dashboard) []Variable {
 		})
 	}
 	return variables
-}
-
-func loadMetrics(dashboards []Dashboard) Metrics {
-	var metrics = make(Metrics)
-	for _, dashboard := range dashboards {
-		variables := loadVariables(dashboard)
-
-		for _, panel := range dashboard.Panels {
-			if slices.Contains(IGNORED_TYPES, panel.Type) {
-				SKIPPED++
-				continue
-			}
-
-			for _, target := range panel.Targets {
-				expression := normalizeExpression(target.Expr, variables)
-				if expression == "" {
-					SKIPPED++
-					continue
-				}
-
-				selectors, err := parseSelectors(expression)
-				if err != nil {
-					ERRORS++
-					fmt.Fprintf(
-						os.Stderr,
-						"\033[31mDashboard '%s', Panel '%d'\033[0m\n"+
-							"\033[31m%s\033[0m\nOriginal:\t%s\nNormalized:\t%s\n\n",
-						dashboard.UID,
-						panel.ID,
-						err.Error(),
-						target.Expr,
-						expression,
-					)
-				}
-
-				for _, selector := range selectors {
-					name, labels := loadMetric(selector)
-					metrics[name] = merge(metrics[name], labels)
-				}
-				SUCCESS++
-			}
-		}
-	}
-	return metrics
 }
 
 // Format is like [[__name__="MetricName" label1="value" label2="value"]]
@@ -318,4 +326,12 @@ func safeIndex(strings []string, idx int) string {
 		return strings[idx]
 	}
 	return ""
+}
+
+func listFiles(directory string) []string {
+	files, err := os.ReadDir(filepath.Join(directory, "dashboards"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return Map(files, func(file fs.DirEntry) string { return filepath.Join(directory, file.Name()) })
 }
