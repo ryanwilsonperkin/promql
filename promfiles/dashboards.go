@@ -20,21 +20,21 @@ func NewDashboardFile(filename string) DashboardFile {
 
 func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
 	var result LoadResult
-	variables := loadVariables(dashboardFile.Dashboard)
+	variables := dashboardFile.LoadVariables()
 
 	for _, panel := range dashboardFile.Dashboard.Panels {
-		if slices.Contains(IGNORED_TYPES, panel.Type) {
+		if panel.Ignored() {
 			result.Skipped++
 			continue
 		}
 
 		for _, target := range panel.Targets {
-			expression := normalizeExpression(target.Expr, variables)
-			if expression == "" {
+			if target.Ignored() {
 				result.Skipped++
 				continue
 			}
 
+			expression := normalizeExpression(target.Expr, variables)
 			selectors, err := parseSelectors(expression)
 			if err != nil {
 				result.Failed++
@@ -52,12 +52,31 @@ func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
 
 			for _, selector := range selectors {
 				name, labels := loadMetric(selector)
-				metrics[name] = merge(metrics[name], labels)
+				metrics.AddLabels(name, labels)
 			}
 			result.Succeeded++
 		}
 	}
 	return result
+}
+
+func (dashboardFile *DashboardFile) LoadVariables() []Variable {
+	var variables []Variable
+
+	for _, template := range dashboardFile.Dashboard.Templating.List {
+		value := firstNonEmptyString(
+			safeIndex(template.Current.Values.TemplateValues, 0),
+			template.Query,
+		)
+		if value == "?" {
+			value = template.AllValue
+		}
+		variables = append(variables, Variable{
+			Name:  template.Name,
+			Value: value,
+		})
+	}
+	return variables
 }
 
 type Dashboard struct {
@@ -107,6 +126,24 @@ type Panel struct {
 	Targets []Target `json:"targets"`
 }
 
+func (panel *Panel) Ignored() bool {
+	return slices.Contains(
+		[]string{
+			"text",
+			"logs",
+			"news",
+			"canvas",
+			"dashlist",
+			"table",
+		},
+		panel.Type,
+	)
+}
+
 type Target struct {
 	Expr string `json:"expr"`
+}
+
+func (target *Target) Ignored() bool {
+	return target.Expr == ""
 }

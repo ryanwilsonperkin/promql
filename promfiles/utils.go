@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,7 +14,35 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
-type Metrics map[string][]string
+type Metrics struct {
+	Entries map[string][]string
+}
+
+func NewMetrics() Metrics {
+	var metrics Metrics
+	metrics.Entries = make(map[string][]string)
+	return metrics
+
+}
+
+func (metrics *Metrics) AddMetric(name string) {
+	if metrics.Entries[name] == nil {
+		metrics.Entries[name] = make([]string, 0)
+	}
+}
+
+func (metrics *Metrics) AddLabel(name string, label string) {
+	metrics.AddMetric(name)
+	if !slices.Contains(metrics.Entries[name], label) {
+		metrics.Entries[name] = append(metrics.Entries[name], label)
+	}
+}
+
+func (metrics *Metrics) AddLabels(name string, labels []string) {
+	for _, label := range labels {
+		metrics.AddLabel(name, label)
+	}
+}
 
 type Variable struct {
 	Name  string
@@ -30,15 +59,6 @@ func (result1 *LoadResult) Add(result2 LoadResult) {
 	result1.Failed += result2.Failed
 	result1.Skipped += result2.Skipped
 	result1.Succeeded += result2.Succeeded
-}
-
-var IGNORED_TYPES = []string{
-	"text",
-	"logs",
-	"news",
-	"canvas",
-	"dashlist",
-	"table",
 }
 
 var GLOBAL_VARIABLES = []Variable{
@@ -59,7 +79,7 @@ var GLOBAL_VARIABLES = []Variable{
 func normalizeExpression(expr string, variables []Variable) string {
 	var normalized = expr
 
-	// Expand dashboard template variables
+	// Expand template variables
 	for _, variable := range variables {
 		pattern1 := fmt.Sprintf("$%s", variable.Name)
 		pattern2 := fmt.Sprintf("${%s}", variable.Name)
@@ -107,6 +127,7 @@ func normalizeExpression(expr string, variables []Variable) string {
 	return normalized
 }
 
+// Parse an expression and return the metrics
 func parseSelectors(input string) ([][]*labels.Matcher, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
@@ -127,24 +148,6 @@ func loadFile(filename string) []byte {
 		log.Fatal(err)
 	}
 	return byteValue
-}
-
-func loadVariables(dashboard Dashboard) []Variable {
-	var variables []Variable
-	for _, template := range dashboard.Templating.List {
-		value := firstNonEmptyString(
-			safeIndex(template.Current.Values.TemplateValues, 0),
-			template.Query,
-		)
-		if value == "?" {
-			value = template.AllValue
-		}
-		variables = append(variables, Variable{
-			Name:  template.Name,
-			Value: value,
-		})
-	}
-	return variables
 }
 
 // Format is like [[__name__="MetricName" label1="value" label2="value"]]

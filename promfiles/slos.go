@@ -22,7 +22,7 @@ func (sloFile *SLOFile) Load(metrics Metrics) LoadResult {
 		for _, filter := range metric.Filters {
 			labels = append(labels, filter.Key)
 		}
-		metrics[name] = merge(metrics[name], labels)
+		metrics.AddLabels(name, labels)
 		result.Succeeded++
 	}
 	return result

@@ -43,7 +43,7 @@ func (monitorFile *MonitorFile) Load(metrics Metrics) LoadResult {
 
 	for _, selector := range selectors {
 		name, labels := loadMetric(selector)
-		metrics[name] = merge(metrics[name], labels)
+		metrics.AddLabels(name, labels)
 	}
 	result.Succeeded++
 	return result

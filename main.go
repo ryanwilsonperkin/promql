@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	var metrics = make(promfiles.Metrics)
+	var metrics = promfiles.NewMetrics()
 	var result promfiles.LoadResult
 
 	if len(os.Args) != 2 {
@@ -37,7 +37,7 @@ func main() {
 		result.Add(slo.Load(metrics))
 	}
 
-	for metric, labels := range metrics {
+	for metric, labels := range metrics.Entries {
 		fmt.Printf("%s %s\n", metric, strings.Join(labels, " "))
 	}
 	fmt.Fprintln(os.Stderr, "Skipped:   ", result.Skipped)
