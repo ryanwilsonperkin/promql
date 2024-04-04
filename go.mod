@@ -1,4 +1,4 @@
-module example/user/hello
+module github.com/ryanwilsonperkin/promql
 
 go 1.21
 

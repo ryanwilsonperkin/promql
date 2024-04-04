@@ -1,0 +1,112 @@
+package promfiles
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"slices"
+)
+
+type DashboardFile struct {
+	Dashboard Dashboard `json:"dashboard"`
+}
+
+func NewDashboardFile(filename string) DashboardFile {
+	var dashboardFile DashboardFile
+	bytes := loadFile(filename)
+	json.Unmarshal(bytes, &dashboardFile)
+	return dashboardFile
+}
+
+func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
+	var result LoadResult
+	variables := loadVariables(dashboardFile.Dashboard)
+
+	for _, panel := range dashboardFile.Dashboard.Panels {
+		if slices.Contains(IGNORED_TYPES, panel.Type) {
+			result.Skipped++
+			continue
+		}
+
+		for _, target := range panel.Targets {
+			expression := normalizeExpression(target.Expr, variables)
+			if expression == "" {
+				result.Skipped++
+				continue
+			}
+
+			selectors, err := parseSelectors(expression)
+			if err != nil {
+				result.Failed++
+				fmt.Fprintf(
+					os.Stderr,
+					"\033[31mDashboard '%s', Panel '%d'\033[0m\n"+
+						"\033[31m%s\033[0m\nOriginal:\t%s\nNormalized:\t%s\n\n",
+					dashboardFile.Dashboard.UID,
+					panel.ID,
+					err.Error(),
+					target.Expr,
+					expression,
+				)
+			}
+
+			for _, selector := range selectors {
+				name, labels := loadMetric(selector)
+				metrics[name] = merge(metrics[name], labels)
+			}
+			result.Succeeded++
+		}
+	}
+	return result
+}
+
+type Dashboard struct {
+	ID         int        `json:"id"`
+	UID        string     `json:"uid"`
+	Templating Templating `json:"templating"`
+	Panels     []Panel    `json:"panels"`
+}
+
+type Templating struct {
+	List []Template `json:"list"`
+}
+
+type Template struct {
+	Name     string          `json:"name"`
+	Current  TemplateCurrent `json:"current"`
+	Query    string          `json:"query"`
+	AllValue string          `json:"allValue"`
+}
+
+type TemplateCurrent struct {
+	Values TemplateValuesWrapper `json:"value"`
+}
+
+type TemplateValuesWrapper struct {
+	TemplateValues
+	Partial bool `json:"-"`
+}
+
+type TemplateValues []string
+
+// Override unmarshalling to allow dashboad.templating.list[].current.value to be either a string or list of strings
+func (w *TemplateValuesWrapper) UnmarshalJSON(data []byte) error {
+	if data[0] == '"' {
+		s := string(data)
+		unquoted := s[1 : len(s)-1]
+		w.Partial = true
+		w.TemplateValues = []string{unquoted}
+		return nil
+	}
+	return json.Unmarshal(data, &w.TemplateValues)
+}
+
+type Panel struct {
+	ID      int      `json:"id"`
+	Type    string   `json:"type"`
+	Targets []Target `json:"targets"`
+}
+
+type Target struct {
+	Expr string `json:"expr"`
+}
