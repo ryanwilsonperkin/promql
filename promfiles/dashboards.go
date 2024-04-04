@@ -38,16 +38,7 @@ func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
 			targetMetrics, err := parseExpression(expression)
 			if err != nil {
 				result.Failed++
-				fmt.Fprintf(
-					os.Stderr,
-					"\033[31mDashboard '%s', Panel '%d'\033[0m\n"+
-						"\033[31m%s\033[0m\nOriginal:\t%s\nNormalized:\t%s\n\n",
-					dashboardFile.Dashboard.UID,
-					panel.ID,
-					err.Error(),
-					target.Expr,
-					expression,
-				)
+				fmt.Fprintf(os.Stderr, "Dashboard '%s', Panel '%d'\n%s\nOriginal:\t%s\nNormalized:\t%s\n\n", dashboardFile.Dashboard.UID, panel.ID, err.Error(), target.Expr, expression)
 			}
 
 			metrics.Add(targetMetrics)

@@ -30,15 +30,7 @@ func (monitorFile *MonitorFile) Load(metrics Metrics) LoadResult {
 	monitorMetrics, err := parseExpression(expression)
 	if err != nil {
 		result.Failed++
-		fmt.Fprintf(
-			os.Stderr,
-			"\033[31mMonitor '%s'\033[0m\n"+
-				"\033[31m%s\033[0m\nOriginal:\t%s\nNormalized:\t%s\n\n",
-			monitorFile.ID,
-			err.Error(),
-			monitorFile.Expression,
-			expression,
-		)
+		fmt.Fprintf(os.Stderr, "Monitor '%s'\n%s\nOriginal:\t%s\nNormalized:\t%s\n\n", monitorFile.ID, err.Error(), monitorFile.Expression, expression)
 	}
 
 	metrics.Add(monitorMetrics)
