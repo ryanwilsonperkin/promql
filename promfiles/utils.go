@@ -177,21 +177,6 @@ func loadFile(filename string) []byte {
 	return byteValue
 }
 
-func merge(arr1 []string, arr2 []string) []string {
-	var set = make(map[string]bool)
-	var arr3 []string
-	for _, val := range arr1 {
-		set[val] = true
-	}
-	for _, val := range arr2 {
-		set[val] = true
-	}
-	for key := range set {
-		arr3 = append(arr3, key)
-	}
-	return arr3
-}
-
 func firstNonEmptyString(strings ...string) string {
 	for _, s := range strings {
 		if len(s) != 0 {
