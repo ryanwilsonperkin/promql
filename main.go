@@ -168,6 +168,39 @@ func (monitorFile *MonitorFile) Load(metrics Metrics) {
 	return
 }
 
+type SLOFile struct {
+	ID      string      `json:"id"`
+	Metrics []SLIMetric `json:"sliMetrics"`
+}
+
+func NewSLOFile(filename string) SLOFile {
+	var sloFile SLOFile
+	bytes := loadFile(filename)
+	json.Unmarshal(bytes, &sloFile)
+	return sloFile
+}
+
+func (sloFile *SLOFile) Load(metrics Metrics) {
+	for _, metric := range sloFile.Metrics {
+		name := metric.Name
+		var labels []string
+		for _, filter := range metric.Filters {
+			labels = append(labels, filter.Key)
+		}
+		metrics[name] = merge(metrics[name], labels)
+		SUCCESS++
+	}
+}
+
+type SLIMetric struct {
+	Name    string   `json:"metricName"`
+	Filters []Filter `json:"filters"`
+}
+
+type Filter struct {
+	Key string `json:"key"`
+}
+
 var REPLACE_XRATE_EXPR = regexp.MustCompile("xrate\\(")
 var REPLACE_XINCREASE_EXPR = regexp.MustCompile("xincrease\\(")
 
@@ -208,7 +241,7 @@ func main() {
 	backupDir := os.Args[1]
 	dashboardFiles := listFiles(filepath.Join(backupDir, "dashboards"))
 	monitorFiles := listFiles(filepath.Join(backupDir, "monitors"))
-	// sloFiles := listFiles(filepath.Join(backupDir, "slos"))
+	sloFiles := listFiles(filepath.Join(backupDir, "slos"))
 
 	for _, dashboard := range Map(dashboardFiles, NewDashboardFile) {
 		dashboard.Load(metrics)
@@ -216,6 +249,10 @@ func main() {
 
 	for _, monitor := range Map(monitorFiles, NewMonitorFile) {
 		monitor.Load(metrics)
+	}
+
+	for _, slo := range Map(sloFiles, NewSLOFile) {
+		slo.Load(metrics)
 	}
 
 	for metric, labels := range metrics {
