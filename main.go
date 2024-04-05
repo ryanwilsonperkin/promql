@@ -26,19 +26,19 @@ func main() {
 	sloFiles := listFiles(filepath.Join(backupDir, "slos"))
 
 	for _, dashboard := range Map(dashboardFiles, promfiles.NewDashboardFile) {
-		result.Add(dashboard.Load(metrics))
+		result.Add(dashboard.Load(&metrics))
 	}
 
 	for _, monitor := range Map(monitorFiles, promfiles.NewMonitorFile) {
-		result.Add(monitor.Load(metrics))
+		result.Add(monitor.Load(&metrics))
 	}
 
 	for _, slo := range Map(sloFiles, promfiles.NewSLOFile) {
-		result.Add(slo.Load(metrics))
+		result.Add(slo.Load(&metrics))
 	}
 
-	for metric, labels := range metrics.Entries {
-		fmt.Printf("%s %s\n", metric, strings.Join(labels, " "))
+	for _, metric := range metrics.Entries {
+		fmt.Println(metric.Location, metric.Name, strings.Join(metric.Labels, " "))
 	}
 	fmt.Fprintln(os.Stderr, "Skipped:   ", result.Skipped)
 	fmt.Fprintln(os.Stderr, "Succeeded: ", result.Succeeded)

@@ -1,6 +1,9 @@
 package promfiles
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type SLOFile struct {
 	ID      string      `json:"id"`
@@ -14,7 +17,7 @@ func NewSLOFile(filename string) SLOFile {
 	return sloFile
 }
 
-func (sloFile *SLOFile) Load(metrics Metrics) LoadResult {
+func (sloFile *SLOFile) Load(metrics *Metrics) LoadResult {
 	var result LoadResult
 	for _, metric := range sloFile.Metrics {
 		name := metric.Name
@@ -22,10 +25,14 @@ func (sloFile *SLOFile) Load(metrics Metrics) LoadResult {
 		for _, filter := range metric.Filters {
 			labels = append(labels, filter.Key)
 		}
-		metrics.AddLabels(name, labels)
+		metrics.Add(sloFile.URL(), name, labels)
 		result.Succeeded++
 	}
 	return result
+}
+
+func (sloFile *SLOFile) URL() string {
+	return fmt.Sprintf("https://observe.shopify.io/a/observe/monitoring/slos/%s", sloFile.ID)
 }
 
 type SLIMetric struct {

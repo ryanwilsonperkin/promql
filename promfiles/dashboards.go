@@ -18,7 +18,7 @@ func NewDashboardFile(filename string) DashboardFile {
 	return dashboardFile
 }
 
-func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
+func (dashboardFile *DashboardFile) Load(metrics *Metrics) LoadResult {
 	var result LoadResult
 	variables := dashboardFile.LoadVariables()
 
@@ -41,7 +41,9 @@ func (dashboardFile *DashboardFile) Load(metrics Metrics) LoadResult {
 				fmt.Fprintf(os.Stderr, "Dashboard '%s', Panel '%d'\n%s\nOriginal:\t%s\nNormalized:\t%s\n\n", dashboardFile.Dashboard.UID, panel.ID, err.Error(), target.Expr, expression)
 			}
 
-			metrics.Add(targetMetrics)
+			for _, metric := range targetMetrics {
+				metrics.Add(dashboardFile.URL(), metric.Name, metric.Labels)
+			}
 			result.Succeeded++
 		}
 	}
@@ -58,6 +60,10 @@ func (dashboardFile *DashboardFile) LoadVariables() []Variable {
 		})
 	}
 	return variables
+}
+
+func (dashboardFile *DashboardFile) URL() string {
+	return fmt.Sprintf("https://observe.shopify.io/d/%s", dashboardFile.Dashboard.UID)
 }
 
 type Dashboard struct {

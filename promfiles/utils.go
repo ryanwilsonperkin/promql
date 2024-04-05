@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -15,39 +14,23 @@ import (
 )
 
 type Metrics struct {
-	Entries map[string][]string
+	Entries []Metric
+}
+
+type Metric struct {
+	Location string
+	Name     string
+	Labels   []string
 }
 
 func NewMetrics() Metrics {
 	var metrics Metrics
-	metrics.Entries = make(map[string][]string)
 	return metrics
-
 }
 
-func (metrics *Metrics) Add(otherMetrics Metrics) {
-	for name, labels := range otherMetrics.Entries {
-		metrics.AddLabels(name, labels)
-	}
-}
-
-func (metrics *Metrics) AddLabels(name string, labels []string) {
-	for _, label := range labels {
-		metrics.addLabel(name, label)
-	}
-}
-
-func (metrics *Metrics) addMetric(name string) {
-	if metrics.Entries[name] == nil {
-		metrics.Entries[name] = make([]string, 0)
-	}
-}
-
-func (metrics *Metrics) addLabel(name string, label string) {
-	metrics.addMetric(name)
-	if !slices.Contains(metrics.Entries[name], label) {
-		metrics.Entries[name] = append(metrics.Entries[name], label)
-	}
+func (metrics *Metrics) Add(location string, name string, labels []string) {
+	var newMetric = Metric{Location: location, Name: name, Labels: labels}
+	metrics.Entries = append(metrics.Entries, newMetric)
 }
 
 type Variable struct {
@@ -133,20 +116,25 @@ func normalizeExpression(expr string, variables []Variable) string {
 	return normalized
 }
 
+type ParsedMetric struct {
+	Name   string
+	Labels []string
+}
+
 // Parse an expression and return the metrics
-func parseExpression(input string) (Metrics, error) {
-	var metrics = NewMetrics()
+func parseExpression(input string) ([]ParsedMetric, error) {
+	var parsedMetrics []ParsedMetric
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
-		return metrics, err
+		return nil, err
 	}
 
 	selectors := parser.ExtractSelectors(expr)
 	for _, selector := range selectors {
 		name, labels := parseSelector(selector)
-		metrics.AddLabels(name, labels)
+		parsedMetrics = append(parsedMetrics, ParsedMetric{Name: name, Labels: labels})
 	}
-	return metrics, nil
+	return parsedMetrics, nil
 }
 
 // Format is like [[__name__="MetricName" label1="value" label2="value"]]

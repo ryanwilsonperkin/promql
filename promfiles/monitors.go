@@ -18,7 +18,7 @@ func NewMonitorFile(filename string) MonitorFile {
 	return monitorFile
 }
 
-func (monitorFile *MonitorFile) Load(metrics Metrics) LoadResult {
+func (monitorFile *MonitorFile) Load(metrics *Metrics) LoadResult {
 	var result LoadResult
 	var variables []Variable
 	expression := normalizeExpression(monitorFile.Expression, variables)
@@ -33,7 +33,13 @@ func (monitorFile *MonitorFile) Load(metrics Metrics) LoadResult {
 		fmt.Fprintf(os.Stderr, "Monitor '%s'\n%s\nOriginal:\t%s\nNormalized:\t%s\n\n", monitorFile.ID, err.Error(), monitorFile.Expression, expression)
 	}
 
-	metrics.Add(monitorMetrics)
+	for _, metric := range monitorMetrics {
+		metrics.Add(monitorFile.URL(), metric.Name, metric.Labels)
+	}
 	result.Succeeded++
 	return result
+}
+
+func (monitorFile *MonitorFile) URL() string {
+	return fmt.Sprintf("https://observe.shopify.io/a/observe/monitoring/alertRules/%s", monitorFile.ID)
 }
