@@ -52,16 +52,9 @@ func (dashboardFile *DashboardFile) LoadVariables() []Variable {
 	var variables []Variable
 
 	for _, template := range dashboardFile.Dashboard.Templating.List {
-		value := firstNonEmptyString(
-			safeIndex(template.Current.Values.TemplateValues, 0),
-			template.Query,
-		)
-		if value == "?" {
-			value = template.AllValue
-		}
 		variables = append(variables, Variable{
 			Name:  template.Name,
-			Value: value,
+			Value: template.GetValue(),
 		})
 	}
 	return variables
@@ -83,6 +76,18 @@ type Template struct {
 	Current  TemplateCurrent `json:"current"`
 	Query    string          `json:"query"`
 	AllValue string          `json:"allValue"`
+}
+
+func (template *Template) GetValue() string {
+	var value string
+	value = firstNonEmptyString(
+		safeIndex(template.Current.Values.TemplateValues, 0),
+		template.Query,
+	)
+	if value == "?" {
+		value = template.AllValue
+	}
+	return value
 }
 
 type TemplateCurrent struct {
